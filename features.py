@@ -1,20 +1,31 @@
 # Features.py:
 # Contains functions for all feature extraction
-# Only 6 used in 2/13/25 version thus far:
+# 6 novel features used in 3/12/25 version thus far:
 # Perplexity, Sentence Length Statistics, Sentence Type Distribution, CEFR Level Distribution
 # & Readability, Adverbial Placement Distribution
+
+# Also contains state-of-the-art features modified from: (labeled)
+# https://github.com/janithnw/pan2021_authorship_verification/blob/main/features.py
 
 import re
 import torch
 import textstat
 import math
+import nltk
 import numpy as np
 from scipy.stats import entropy
 from pipeline_model_setup import nlp  # Use the shared custom pipeline
-from preprocessing import preprocess_cefr_data  # For loading CEFR data
+from preprocessing import get_stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import FeatureUnion
+from collections import defaultdict
+from textcomplexity import vocabulary_richness
+from utills import chunker
 
+# =================== Novel Writing Style Features ===================
 
-# Perplexity Feature
+# 1. Perplexity Feature
 def calculate_pxl_optimized(text, model, tokenizer, device, max_length=1024, overlap=32):
     
     tokens = tokenizer.encode(text, return_tensors="pt")[0] #number encode
@@ -50,7 +61,7 @@ def calculate_pxl_optimized(text, model, tokenizer, device, max_length=1024, ove
     return avg_perplexity
 
 
-# Sentence Length Features
+# 2. Sentence Length Features
 def calculate_sentence_length_stats(text):
     sentences = re.split(r'[.!?]+', text)
     
@@ -102,7 +113,7 @@ def calculate_partial_participle(text):
 
     return participial_count
 
-# Sentence Type Distribution Feature
+# 3. Sentence Type Distribution Feature
 def calculate_sentence_type(text):
     doc = nlp(text)
 
@@ -214,7 +225,7 @@ def count_cefr_levels(text, cefr_dict):
 
     return probability_distribution
 
-# CEFR Level Distribution Feature (updated)
+# 4. CEFR Level Distribution Feature (updated)
 def count_cefr_levels_exclude_unknown(text, cefr_dict):
 
     levels = {"A1": 0, "A2": 0, "B1": 0, "B2": 0, "C1": 0, "C2": 0, "Unknown": 0}
@@ -238,13 +249,13 @@ def count_cefr_levels_exclude_unknown(text, cefr_dict):
     
     return probability_distribution
 
-# Readability Feature
+# 5. Readability Feature
 def readability_metric(text):
     flesch_score = textstat.flesch_reading_ease(text)
     return flesch_score
 
 
-# Adverbial Placement Distribution Feature
+# 6. Adverbial Placement Distribution Feature
 def adverbial_placement(text):
     doc = nlp(text)
     adverb_positions = []
@@ -312,3 +323,225 @@ def adverbial_placement(text):
         placement_proportions = {placement: 0 for placement in placement_counts}
 
     return placement_proportions, adverb_positions, placement_counts
+
+
+# =================== State-of-the-art Features ===================
+
+def pass_fn(x):
+    return x
+
+class CustomTfIdfTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer that wraps TfidfVectorizer to operate on a given key in an entry.
+    Used for character n-grams, POS-tag n-grams, special characters, etc.
+    """
+    def __init__(self, key, analyzer, n=1, vocab=None):
+        self.key = key
+        if self.key in ['pos_tags', 'tokens', 'pos_tag_chunks', 'pos_tag_chunk_subtrees']:
+            self.vectorizer = TfidfVectorizer(analyzer=analyzer, min_df=0.1,
+                                               tokenizer=pass_fn, preprocessor=pass_fn,
+                                               vocabulary=vocab, norm='l2', ngram_range=(1, n))
+        else:
+            self.vectorizer = TfidfVectorizer(analyzer=analyzer, min_df=0.1,
+                                               vocabulary=vocab, norm='l2', ngram_range=(1, n))
+    def fit(self, x, y=None):
+        self.vectorizer.fit([entry[self.key] for entry in x], y)
+        return self
+    def transform(self, x):
+        return self.vectorizer.transform([entry[self.key] for entry in x])
+    def get_feature_names_out(self):
+        return self.vectorizer.get_feature_names_out()
+
+class CustomFreqTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer that computes frequency-based features (normalized by token count).
+    """
+    def __init__(self, analyzer, n=1, vocab=None):
+        self.vectorizer = TfidfVectorizer(tokenizer=pass_fn, preprocessor=pass_fn,
+                                           vocabulary=vocab, norm=None, ngram_range=(1, n))
+    def fit(self, x, y=None):
+        self.vectorizer.fit([entry['tokens'] for entry in x], y)
+        return self
+    def transform(self, x):
+        d = np.array([1 + len(entry['tokens']) for entry in x])[:, None]
+        return self.vectorizer.transform([entry['tokens'] for entry in x]) / d
+    def get_feature_names_out(self):
+        return self.vectorizer.get_feature_names_out()
+
+class CustomFuncTransformer(BaseEstimator, TransformerMixin):
+    """
+    Generic transformer that applies a custom function to each entry.
+    """
+    def __init__(self, transformer_func, fnames=None):
+        self.transformer_func = transformer_func
+        self.fnames = fnames
+    def fit(self, x, y=None):
+        return self
+    def transform(self, x):
+        xx = np.array([self.transformer_func(entry) for entry in x])
+        if len(xx.shape) == 1:
+            return xx[:, None]
+        return xx
+    def get_feature_names_out(self):
+        return self.fnames if self.fnames is not None else ['']
+
+class MaskedStopWordsTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer that replaces non-stopwords with their POS tags and then vectorizes.
+    """
+    def __init__(self, stopwords, n):
+        self.stopwords = set(stopwords)
+        self.vectorizer = TfidfVectorizer(tokenizer=pass_fn, preprocessor=pass_fn,
+                                           min_df=0.1, ngram_range=(1, n))
+    def _process(self, entry):
+        return [
+            entry['tokens'][i] if entry['tokens'][i] in self.stopwords else entry['pos_tags'][i]
+            for i in range(len(entry['tokens']))
+        ]
+    def fit(self, X, y=None):
+        processed = [self._process(entry) for entry in X]
+        self.vectorizer.fit(processed)
+        return self
+    def transform(self, X):
+        processed = [self._process(entry) for entry in X]
+        return self.vectorizer.transform(processed)
+    def get_feature_names_out(self):
+        return self.vectorizer.get_feature_names_out()
+
+class POSTagStats(BaseEstimator, TransformerMixin):
+    """
+    Transformer that computes POS tag ratios and average token lengths.
+    """
+    POS_TAGS = [
+        'CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ',
+        'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS',
+        'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$',
+        'RB', 'RBR', 'RBS', 'RP', 'SYM', 'TO', 'UH',
+        'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT',
+        'WP', 'WP$', 'WRB'
+    ]
+    def __init__(self):
+        pass
+    def _process(self, entry):
+        tags_dict = defaultdict(set)
+        tags_word_length = defaultdict(list)
+        for i in range(len(entry['tokens'])):
+            tags_dict[entry['pos_tags'][i]].add(entry['tokens'][i])
+            tags_word_length[entry['pos_tags'][i]].append(len(entry['tokens'][i]))
+        res_tag_fractions = np.array([len(tags_dict[t]) for t in self.POS_TAGS])
+        if res_tag_fractions.sum() > 0:
+            res_tag_fractions = res_tag_fractions / res_tag_fractions.sum()
+        res_tag_word_lengths = np.array([np.mean(tags_word_length[t]) if tags_word_length[t] else 0 for t in self.POS_TAGS])
+        return np.concatenate([res_tag_fractions, res_tag_word_lengths])
+    def fit(self, X, y=None):
+        return self
+    def transform(self, X):
+        return [self._process(entry) for entry in X]
+    def get_feature_names_out(self):
+        return ['tag_fraction_' + t for t in self.POS_TAGS] + ['tag_word_length_' + t for t in self.POS_TAGS]
+    
+
+# Word-Level Statistics: Average number of characters per word and word-length distribution.
+def avg_chars_per_word(entry):
+    return np.mean([len(t) for t in entry['tokens']])
+
+def distr_chars_per_word(entry, max_chars=10):
+    counts = [0] * max_chars
+    if not entry['tokens']:
+        return counts
+    for t in entry['tokens']:
+        l = len(t)
+        if l <= max_chars:
+            counts[l - 1] += 1
+    return [c / len(entry['tokens']) for c in counts]
+
+#https://github.com/ashenoy95/writeprints-static/blob/master/whiteprints-static.py
+def hapax_legomena(entry):
+    freq = nltk.FreqDist(word for word in entry['tokens'])
+    hapax = [key for key, val in freq.items() if val == 1]
+    dis = [key for key, val in freq.items() if val == 2]
+    if len(dis) == 0 or len(entry['tokens']) == 0:
+        return 0
+    #return (len(hapax) / len(dis)) / len(entry['tokens'])
+    return (len(hapax) / len(dis))
+
+VOCAB_RICHNESS_FNAMES = [ 'type_token_ratio','guiraud_r','herdan_c','dugast_k','maas_a2','dugast_u','tuldava_ln','brunet_w','cttr','summer_s','sichel_s','michea_m','honore_h','herdan_vm','entropy','yule_k','simpson_d']
+
+def handle_exceptions(func, *args):
+    try:
+        return func(*args)
+    except:
+        #print('Error occured', func, *args)
+        return 0.0
+    
+def compute_vocab_richness(entry):
+    if len(entry['tokens']) == 0:
+        return np.zeros(len(VOCAB_RICHNESS_FNAMES))
+    window_size = 1000
+    res = []
+    for chunk in chunker(entry['tokens'], window_size):
+        text_length, vocabulary_size, frequency_spectrum = vocabulary_richness.preprocess(chunk, fs=True)
+        res.append([
+            handle_exceptions(vocabulary_richness.type_token_ratio, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.guiraud_r, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.herdan_c, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.dugast_k, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.maas_a2, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.dugast_u, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.tuldava_ln, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.brunet_w, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.cttr, text_length, vocabulary_size),
+            handle_exceptions(vocabulary_richness.summer_s, text_length, vocabulary_size),
+
+            handle_exceptions(vocabulary_richness.sichel_s, vocabulary_size, frequency_spectrum),
+            handle_exceptions(vocabulary_richness.michea_m, vocabulary_size, frequency_spectrum),
+
+            handle_exceptions(vocabulary_richness.honore_h, text_length, vocabulary_size, frequency_spectrum),
+            handle_exceptions(vocabulary_richness.herdan_vm, text_length, vocabulary_size, frequency_spectrum),
+
+            handle_exceptions(vocabulary_richness.entropy, text_length, frequency_spectrum),
+            handle_exceptions(vocabulary_richness.yule_k, text_length, frequency_spectrum),
+            handle_exceptions(vocabulary_richness.simpson_d, text_length, frequency_spectrum),
+        ])
+    return np.array(res).mean(axis=0)
+
+
+# =================== Feature Union Assembly ===================
+
+def get_transformer(selected_featuresets=None):
+    """
+    Assemble all feature extractors into a single FeatureUnion.
+    You can select a subset by providing selected_featuresets (list of names).
+    """
+    char_distr = CustomTfIdfTransformer('preprocessed', 'char_wb', n=3)
+    pos_tag_distr = CustomTfIdfTransformer('pos_tags', 'word', n=3)
+    special_char_distr = CustomTfIdfTransformer('preprocessed', 'char_wb', vocab=punctuation)
+    freq_func_words = CustomFreqTransformer('word', vocab=get_stopwords())
+    pos_tag_chunks_distr = CustomTfIdfTransformer('pos_tag_chunks', 'word', n=3)
+    pos_tag_chunks_subtree_distr = CustomTfIdfTransformer('pos_tag_chunk_subtrees', 'word', n=1)
+    punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{¦}~'
+    
+    featuresets = [
+        ('char_distr', char_distr),   # Character tri-grams
+        ('pos_tag_distr', pos_tag_distr),  # POS-tag tri-grams
+        ('special_char_distr', special_char_distr),  # Special characters TF-IDF
+        ('pos_tag_chunks_distr', pos_tag_chunks_distr),  # POS-tag chunk tri-grams
+        ('pos_tag_chunks_subtree_distr', pos_tag_chunks_subtree_distr),  # POS chunk expansions
+        ('special_char_distr', special_char_distr),  # Special characters TF-IDF
+        ('freq_func_words', freq_func_words),  # Function word frequencies
+        ('hapax_legomena', CustomFuncTransformer(hapax_legomena)),  # Hapax/dis-legomena ratio & related richness
+        ('distr_chars_per_word', CustomFuncTransformer(lambda entry: distr_chars_per_word(entry, max_chars=10),
+                                                         fnames=[str(i) for i in range(10)])),  # Word-length distribution
+        ('avg_chars_per_word', CustomFuncTransformer(lambda entry: np.mean([len(t) for t in entry['tokens']]))),  # Average characters per word
+        ('vocab_richness', CustomFuncTransformer(compute_vocab_richness, fnames=VOCAB_RICHNESS_FNAMES)),  # Additional vocabulary richness measures
+        ('masked_stop_words_distr', MaskedStopWordsTransformer(get_stopwords(), 3)),  # Stop-word and POS-tag hybrid tri-grams
+        ('pos_tag_stats', POSTagStats())  # POS tag ratios and average word lengths per tag
+    ]
+    if selected_featuresets is None:
+        transformer = FeatureUnion(featuresets)
+    else:
+        transformer = FeatureUnion([f for f in featuresets if f[0] in selected_featuresets])
+    return transformer
+
+
+

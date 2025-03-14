@@ -10,7 +10,7 @@ import json
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 import numpy as np
-from preprocessing import replace_named_entities
+from preprocessing import replace_named_entities, prepare_entry
 import itertools
 
 
@@ -81,6 +81,40 @@ def create_pairs_all(data):
     random.shuffle(balanced_pairs)
     return balanced_pairs
 
+
+# New creating pairs where we preprocess before pair creation:
+def create_pairs_all_entries(data):
+    preprocessed_data = {}
+    for author, texts in tqdm(data.items(), desc="Preprocessing texts", unit="author"):
+        entries = [prepare_entry(text) for text in texts]
+        preprocessed_data[author] = entries
+
+    same_author_pairs = []
+    different_author_pairs = []
+    
+    # Create same-author pairs
+    for author, entries in preprocessed_data.items():
+        for entry1, entry2 in itertools.combinations(entries, 2):
+            same_author_pairs.append((entry1, entry2, 1))
+    
+    # Create different-author pairs
+    authors = list(preprocessed_data.keys())
+    for i in range(len(authors)):
+        for j in range(i + 1, len(authors)):
+            if preprocessed_data[authors[i]] and preprocessed_data[authors[j]]:
+                entry1 = random.choice(preprocessed_data[authors[i]])
+                entry2 = random.choice(preprocessed_data[authors[j]])
+                different_author_pairs.append((entry1, entry2, 0))
+    
+    # Balance the pairs and shuffle
+    min_size = min(len(same_author_pairs), len(different_author_pairs))
+    balanced_same = random.sample(same_author_pairs, min_size)
+    balanced_diff = random.sample(different_author_pairs, min_size)
+    balanced_pairs = balanced_same + balanced_diff
+    random.shuffle(balanced_pairs)
+    return balanced_pairs
+
+
 def train_test_val_split(df, train_size=0.7, val_size=0.15, test_size=0.15, random_state=None):
     assert train_size + val_size + test_size == 1.0, "Sizes must add up to 1.0"
     train_df, temp_df = train_test_split(df, train_size=train_size, random_state=random_state)
@@ -99,14 +133,25 @@ def download(df, df_name):
     test.to_csv(os.path.join(desktop_dir, f'{df_name}_test.csv'), index=False)
 
 def process_reuters(base_folder):
+    """
+    Process the Reuters dataset from the given base folder.
+    
+    - Reads raw text files from subfolders (e.g., 'C50train' and 'C50test'),
+    - converts them into preprocessed entries
+    - saves the pairs in a JSONL file.
+    
+    Returns:
+        A summary DataFrame of author statistics.
+    """
     data = {}
+    
     for subfolder in ['C50train', 'C50test']:
         folder_path = os.path.join(base_folder, subfolder)
         if os.path.exists(folder_path):
             print(f"Processing folder: {folder_path}")
             subdirs = [d for d in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, d))]
             if subdirs:
-                for author in subdirs:
+                for author in tqdm(subdirs, desc=f"Processing authors in {subfolder}", unit="author"):
                     author_folder = os.path.join(folder_path, author)
                     files = [f for f in os.listdir(author_folder) if f.endswith('.txt')]
                     texts = []
@@ -117,21 +162,36 @@ def process_reuters(base_folder):
                     if texts:
                         data.setdefault(author, []).extend(texts)
             else:
+                from preprocessing import read_texts  # Assume this exists
                 author_texts = read_texts(folder_path)
                 for author, texts in author_texts.items():
                     data.setdefault(author, []).extend(texts)
         else:
             print(f"Folder not found: {folder_path}")
-    pairs = create_pairs(data, reserve_ratio=0.5)
-    df_pairs = pd.DataFrame(pairs, columns=['text1', 'text2', 'same'])
-    print("Number of pairs generated:", len(df_pairs))
-    if df_pairs.empty:
-        raise ValueError("No text pairs were generated. Check your dataset path and pairing logic.")
     
+    pairs = create_pairs_all_entries(data)
+    
+    # Save the pairs as JSONL
     desktop_dir = os.path.expanduser("~/Desktop")
-    output_path = os.path.join(desktop_dir, "reuters_pairs.csv")
-    df_pairs.to_csv(output_path, index=False)
+    output_path = os.path.join(desktop_dir, "reuters_pairs.jsonl")
+    with open(output_path, 'w', encoding='utf-8') as f_out:
+        for entry1, entry2, label in tqdm(pairs, desc="Saving pairs", unit="pair"):
+            json_obj = {
+                'pair': [entry1, entry2],
+                'label': label
+            }
+            f_out.write(json.dumps(json_obj) + "\n")
+    
     print(f"Balanced pairs saved to {output_path}")
+    
+    # A summary DataFrame of author statistics for
+    summary = pd.DataFrame({
+        'author': list(data.keys()),
+        'num_texts': [len(texts) for texts in data.values()]
+    })
+    print(summary)
+    
+    return summary
 
 def process_student_essays(base_path):
     data = {}
