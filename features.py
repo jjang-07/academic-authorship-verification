@@ -515,11 +515,11 @@ def get_transformer(selected_featuresets=None):
     """
     char_distr = CustomTfIdfTransformer('preprocessed', 'char_wb', n=3)
     pos_tag_distr = CustomTfIdfTransformer('pos_tags', 'word', n=3)
+    punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{¦}~'
     special_char_distr = CustomTfIdfTransformer('preprocessed', 'char_wb', vocab=punctuation)
     freq_func_words = CustomFreqTransformer('word', vocab=get_stopwords())
     pos_tag_chunks_distr = CustomTfIdfTransformer('pos_tag_chunks', 'word', n=3)
     pos_tag_chunks_subtree_distr = CustomTfIdfTransformer('pos_tag_chunk_subtrees', 'word', n=1)
-    punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{¦}~'
     
     featuresets = [
         ('char_distr', char_distr),   # Character tri-grams
@@ -527,7 +527,6 @@ def get_transformer(selected_featuresets=None):
         ('special_char_distr', special_char_distr),  # Special characters TF-IDF
         ('pos_tag_chunks_distr', pos_tag_chunks_distr),  # POS-tag chunk tri-grams
         ('pos_tag_chunks_subtree_distr', pos_tag_chunks_subtree_distr),  # POS chunk expansions
-        ('special_char_distr', special_char_distr),  # Special characters TF-IDF
         ('freq_func_words', freq_func_words),  # Function word frequencies
         ('hapax_legomena', CustomFuncTransformer(hapax_legomena)),  # Hapax/dis-legomena ratio & related richness
         ('distr_chars_per_word', CustomFuncTransformer(lambda entry: distr_chars_per_word(entry, max_chars=10),

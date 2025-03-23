@@ -90,13 +90,6 @@ def replace_named_entities(text):
 
     return processed_texts
 
-def load_jsonl(file_path):
-    data = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            data.append(json.loads(line))
-    return pd.DataFrame(data)
-
 def preprocess_cefr_data(file_path):
     cefr_dataframe = pd.read_csv(file_path)
     cefr_dict = {}
@@ -258,9 +251,11 @@ def prepare_entry(text, mode=None, tokenizer='treebank'):
       - The original preprocessed text
       - Tokens, POS tags, and chunk information
     """
+    preprocessed_text = preprocess_text(text)
+    
     tokens = []
     prev_token = ''
-    for t in tokenize(text, tokenizer):
+    for t in tokenize(preprocessed_text, tokenizer):
         if t != prev_token:
             tokens.append(t)
             prev_token = t
@@ -273,7 +268,7 @@ def prepare_entry(text, mode=None, tokenizer='treebank'):
         pos_tags = [t[1] for t in tagger_output]
         pos_chunks, subtree_expansions = pos_tag_chunk(tagger_output, get_nltk_pos_tag_based_ml_chunker())
     entry = {
-        'preprocessed': text,
+        'preprocessed': preprocessed_text,
         'pos_tags': pos_tags,
         'pos_tag_chunks': pos_chunks,
         'pos_tag_chunk_subtrees': subtree_expansions,

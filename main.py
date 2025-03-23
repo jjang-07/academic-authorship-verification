@@ -2,14 +2,17 @@
 # All of the other modules are imported and used accordingly as needed
 # Instance of main is called
 
-import pandas as pd
 import os
 import nltk
-import matplotlib.pyplot as plt
+from tqdm import tqdm
+import pandas as pd
+import numpy as np
 from pipeline_model_setup import setup_gpt2
 from data_processing import process_reuters
-model, tokenizer, device = setup_gpt2()
-from classifier import compare_logistic_regression_kfold, compare_gradient_boosting_kfold, compare_knn_kfold, compare_random_forest_kfold, compare_svm_kfold
+from postprocessing import run_kfold_process
+from sklearn.preprocessing import StandardScaler
+from features import get_transformer
+
 
 def read_input():
     lines = []
@@ -34,12 +37,27 @@ def main():
 
     print("Running main...")
     
-    desktop_dir = os.path.expanduser("~/Desktop")
-
-    process_reuters("/Users/junjang/Desktop/2024-2025 Science Fair Project/Datasets/reuter+50+50")
-
+    model, tokenizer, device = setup_gpt2()
+    preprocessed_file_path = "/Users/junjang/Desktop/reuters_pairs.jsonl"
+    cefr_path = "/Users/junjang/Desktop/2024-2025 Science Fair Project/Datasets/Vocab/ENGLISH_CEFR_WORDS.csv"
+    
+    fold_results = run_kfold_process(
+        preprocessed_path=preprocessed_file_path,
+        cefr_path=cefr_path,
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        output_root="fold_outputs",
+        k=5,
+        pipeline_target_dim=12,
+        data_fraction=1.0
+    )
+    
+    print("K-fold process completed. Fold summary:")
+    print(fold_results)
 
 if __name__ == "__main__":
     main()
     
 # csv_path = "/Users/junjang/Desktop/reuters_train.csv"
+# process_reuters("/Users/junjang/Desktop/2024-2025 Science Fair Project/Datasets/reuter+50+50")
