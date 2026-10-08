@@ -1,0 +1,96 @@
+
+============================================================
+Run 1 (seed 42)  (n=88)
+============================================================
+
+  OVERALL METRICS
+    Analyst alone:   Overall=0.700  AUC=0.693  c@1=0.682
+    Full system:     Overall=0.562  AUC=0.549  c@1=0.499
+
+  ACCURACY
+    Analyst:  60/88 (68.2%)
+    System:   45/88 (51.1%)
+
+  SAME-AUTHOR PAIRS  (n=42)
+    Analyst correct: 30/42 (71.4%)
+    System correct:  24/42 (57.1%)
+
+  DIFFERENT-AUTHOR PAIRS  (n=46)
+    Analyst correct: 30/46 (65.2%)
+    System correct:  21/46 (45.7%)
+
+  DEBATE OUTCOMES
+    Both correct (no flip needed):     24
+    Analyst wrong, Judge corrected:    21
+    Analyst right, Judge flipped wrong:36
+    Both wrong (unfixable):            7
+    Net debate contribution:           -15
+
+  SKEPTIC STANCE DISTRIBUTION
+    AGREE:             23/88 (26.1%)
+    PARTIALLY_DISAGREE:60/88 (68.2%)
+    DISAGREE:          5/88 (5.7%)
+
+============================================================
+Run 2 (seed 123)  (n=100)
+============================================================
+
+  OVERALL METRICS
+    Analyst alone:   Overall=0.782  AUC=0.812  c@1=0.760
+    Full system:     Overall=0.723  AUC=0.747  c@1=0.690
+
+  ACCURACY
+    Analyst:  76/100 (76.0%)
+    System:   69/100 (69.0%)
+
+  SAME-AUTHOR PAIRS  (n=52)
+    Analyst correct: 37/52 (71.2%)
+    System correct:  32/52 (61.5%)
+
+  DIFFERENT-AUTHOR PAIRS  (n=48)
+    Analyst correct: 39/48 (81.2%)
+    System correct:  37/48 (77.1%)
+
+  DEBATE OUTCOMES
+    Both correct (no flip needed):     50
+    Analyst wrong, Judge corrected:    19
+    Analyst right, Judge flipped wrong:26
+    Both wrong (unfixable):            5
+    Net debate contribution:           -7
+
+  SKEPTIC STANCE DISTRIBUTION
+    AGREE:             22/100 (22.0%)
+    PARTIALLY_DISAGREE:76/100 (76.0%)
+    DISAGREE:          2/100 (2.0%)
+
+============================================================
+Run 3 (seed 456)  (n=100)
+============================================================
+
+  OVERALL METRICS
+    Analyst alone:   Overall=0.748  AUC=0.767  c@1=0.720
+    Full system:     Overall=0.725  AUC=0.753  c@1=0.690
+
+  ACCURACY
+    Analyst:  72/100 (72.0%)
+    System:   69/100 (69.0%)
+
+  SAME-AUTHOR PAIRS  (n=52)
+    Analyst correct: 39/52 (75.0%)
+    System correct:  35/52 (67.3%)
+
+  DIFFERENT-AUTHOR PAIRS  (n=48)
+    Analyst correct: 33/48 (68.8%)
+    System correct:  34/48 (70.8%)
+
+  DEBATE OUTCOMES
+    Both correct (no flip needed):     68
+    Analyst wrong, Judge corrected:    1
+    Analyst right, Judge flipped wrong:4
+    Both wrong (unfixable):            27
+    Net debate contribution:           -3
+
+  SKEPTIC STANCE DISTRIBUTION
+    AGREE:             21/100 (21.0%)
+    PARTIALLY_DISAGREE:75/100 (75.0%)
+    DISAGREE:          4/100 (4.0%)

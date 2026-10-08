@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI INK — Authorship Verification</title>
+<style>
+/* ── Reset & Base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --teal:       #26cbc6;
+  --sky:        #52c9e8;
+  --periwinkle: #8ab5ef;
+  --same:       #26cbc6;
+  --diff:       #e07b7b;
+  --bg:         #0e1117;
+  --surface:    #161b22;
+  --surface2:   #1e2530;
+  --border:     #2a3444;
+  --text:       #e6edf3;
+  --muted:      #8b949e;
+  --radius:     12px;
+  --transition: 0.22s ease;
+}
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ────────────────────────────────────────────────────── */
+header {
+  padding: 20px 40px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.logo {
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, var(--teal), var(--sky), var(--periwinkle));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.tagline {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-left: 4px;
+}
+
+/* ── Main container ─────────────────────────────────────────────── */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+/* ── Shared card ────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+
+/* ── Page visibility ────────────────────────────────────────────── */
+.page { display: none; width: 100%; max-width: 1000px; }
+.page.active { display: flex; flex-direction: column; gap: 24px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   LANDING PAGE
+══════════════════════════════════════════════════════════════════ */
+#page-landing {
+  align-items: center;
+  text-align: center;
+}
+.landing-hero h1 {
+  font-size: 2.6rem;
+  font-weight: 800;
+  background: linear-gradient(90deg, var(--teal), var(--sky), var(--periwinkle));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 10px;
+}
+.landing-hero p {
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 540px;
+  margin: 0 auto;
+}
+.mode-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+  max-width: 700px;
+}
+.mode-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  cursor: pointer;
+  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+  text-align: left;
+}
+.mode-card:hover {
+  border-color: var(--teal);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(38,203,198,0.15);
+}
+.mode-icon {
+  font-size: 2.2rem;
+}
+.mode-card h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.mode-card p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  flex: 1;
+}
+.badge-speed {
+  align-self: flex-start;
+  font-size: 0.73rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.badge-fast  { background: rgba(38,203,198,0.15); color: var(--teal); }
+.badge-full  { background: rgba(138,181,239,0.15); color: var(--periwinkle); }
+.btn-select {
+  padding: 10px 0;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  width: 100%;
+}
+.btn-select:hover { opacity: 0.85; }
+.btn-teal       { background: var(--teal);        color: #0e1117; }
+.btn-periwinkle { background: var(--periwinkle);   color: #0e1117; }
+
+/* ══════════════════════════════════════════════════════════════════
+   INPUT PAGE
+══════════════════════════════════════════════════════════════════ */
+.input-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.back-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: color var(--transition), border-color var(--transition);
+}
+.back-btn:hover { color: var(--text); border-color: var(--muted); }
+.input-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--teal), var(--sky));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.mode-pill {
+  margin-left: auto;
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.text-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.textarea-wrap label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin-bottom: 8px;
+}
+textarea {
+  width: 100%;
+  height: 280px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  padding: 14px;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--transition);
+}
+textarea:focus { border-color: var(--teal); }
+textarea::placeholder { color: var(--muted); opacity: 0.5; }
+.run-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+.char-info { color: var(--muted); font-size: 0.82rem; }
+.btn-run {
+  padding: 12px 32px;
+  background: linear-gradient(90deg, var(--teal), var(--sky));
+  border: none;
+  border-radius: 8px;
+  color: #0e1117;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity var(--transition), transform var(--transition);
+}
+.btn-run:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.btn-run:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Loading state ──────────────────────────────────────────────── */
+.loading-panel {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 0;
+}
+.loading-panel.visible { display: flex; }
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.agent-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+}
+.agent-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.92rem;
+  color: var(--muted);
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  transition: color 0.3s, border-color 0.3s, background 0.3s;
+}
+.agent-step.active {
+  color: var(--text);
+  border-color: var(--teal);
+  background: rgba(38,203,198,0.06);
+}
+.agent-step.done {
+  color: var(--teal);
+  border-color: rgba(38,203,198,0.3);
+}
+.step-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.agent-step.active .step-dot { background: var(--teal); animation: pulse 1s infinite; }
+.agent-step.done  .step-dot { background: var(--teal); animation: none; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* ══════════════════════════════════════════════════════════════════
+   RESULTS PAGE
+══════════════════════════════════════════════════════════════════ */
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.result-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.new-analysis-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: color var(--transition), border-color var(--transition);
+}
+.new-analysis-btn:hover { color: var(--text); border-color: var(--teal); }
+
+.verdict-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 24px;
+  border-radius: var(--radius);
+  border: 2px solid;
+  text-align: center;
+}
+.verdict-badge.same  { border-color: var(--same);  background: rgba(38,203,198,0.07); }
+.verdict-badge.diff  { border-color: var(--diff);  background: rgba(224,123,123,0.07); }
+.verdict-label {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+.verdict-badge.same .verdict-label { color: var(--same); }
+.verdict-badge.diff .verdict-label { color: var(--diff); }
+.verdict-conf {
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+.verdict-conf strong { color: var(--text); }
+.verdict-elapsed {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Educator summary */
+.educator-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--sky);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+.educator-box .section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--sky);
+  margin-bottom: 10px;
+}
+.educator-box p {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+/* Agent sections */
+.agents-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.agent-toggle {
+  width: 100%;
+  background: var(--surface2);
+  border: none;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.92rem;
+  text-align: left;
+  transition: background var(--transition);
+}
+.agent-toggle:hover { background: rgba(255,255,255,0.04); }
+.agent-toggle-name { font-weight: 700; flex: 1; }
+.agent-mini-verdict {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.mini-same { background: rgba(38,203,198,0.15); color: var(--teal); }
+.mini-diff { background: rgba(224,123,123,0.15); color: var(--diff); }
+.mini-agree   { background: rgba(38,203,198,0.15); color: var(--teal); }
+.mini-partial { background: rgba(138,181,239,0.15); color: var(--periwinkle); }
+.mini-disagree { background: rgba(224,123,123,0.15); color: var(--diff); }
+.chevron {
+  color: var(--muted);
+  transition: transform var(--transition);
+  font-size: 0.85rem;
+}
+.agent-section.open .chevron { transform: rotate(180deg); }
+.agent-body {
+  display: none;
+  background: var(--surface);
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+}
+.agent-section.open .agent-body { display: block; }
+.agent-body .field-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.agent-body .field-label:first-child { margin-top: 0; }
+.agent-body p  { color: var(--text); font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; }
+.bullet-list   { padding-left: 18px; }
+.bullet-list li { color: var(--text); font-size: 0.9rem; line-height: 1.7; margin-bottom: 4px; }
+
+/* ── Error banner ────────────────────────────────────────────────── */
+.error-banner {
+  display: none;
+  background: rgba(224,123,123,0.12);
+  border: 1px solid var(--diff);
+  border-radius: 8px;
+  padding: 14px 18px;
+  color: var(--diff);
+  font-size: 0.9rem;
+}
+.error-banner.visible { display: block; }
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+footer {
+  padding: 16px 40px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+@media (max-width: 680px) {
+  .mode-cards { grid-template-columns: 1fr; }
+  .text-grid   { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">AI INK</span>
+  <span class="tagline">Authorship verification via stylometrically grounded LLMs</span>
+</header>
+
+<main>
+
+  <!-- ══════════ LANDING PAGE ══════════ -->
+  <section id="page-landing" class="page active">
+    <div class="landing-hero">
+      <h1>AI INK</h1>
+      <p>Determine whether two texts share the same author using multi-agent stylometric debate.</p>
+    </div>
+
+    <div class="mode-cards">
+      <div class="mode-card" onclick="selectMode('single')">
+        <div class="mode-icon">🔬</div>
+        <h2>Single LLM Analysis</h2>
+        <p>Analyst agent performs a close reading of both texts across six stylistic dimensions and returns a direct verdict.</p>
+        <span class="badge-speed badge-fast">Fastest</span>
+        <button class="btn-select btn-teal">Select</button>
+      </div>
+
+      <div class="mode-card" onclick="selectMode('debate')">
+        <div class="mode-icon">⚖️</div>
+        <h2>Multi-Agent Debate</h2>
+        <p>Full Analyst → Skeptic → Judge pipeline. The Skeptic challenges the initial verdict and the Judge synthesises both arguments.</p>
+        <span class="badge-speed badge-full">Most thorough</span>
+        <button class="btn-select btn-periwinkle">Select</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ INPUT PAGE ══════════ -->
+  <section id="page-input" class="page">
+    <div class="input-header">
+      <button class="back-btn" onclick="goHome()">← Back</button>
+      <h2 id="input-title">Analysis</h2>
+      <span id="mode-pill" class="mode-pill"></span>
+    </div>
+
+    <div class="text-grid">
+      <div class="textarea-wrap">
+        <label for="text-a">Text A</label>
+        <textarea id="text-a" placeholder="Paste the first text here…" oninput="updateCharInfo()"></textarea>
+      </div>
+      <div class="textarea-wrap">
+        <label for="text-b">Text B</label>
+        <textarea id="text-b" placeholder="Paste the second text here…" oninput="updateCharInfo()"></textarea>
+      </div>
+    </div>
+
+    <div class="run-row">
+      <span id="char-info" class="char-info"></span>
+      <button id="btn-run" class="btn-run" onclick="runAnalysis()">Run Analysis</button>
+    </div>
+
+    <div id="error-input" class="error-banner"></div>
+
+    <!-- Loading overlay -->
+    <div id="loading-panel" class="loading-panel">
+      <div class="spinner"></div>
+      <div id="agent-steps" class="agent-steps"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ RESULTS PAGE ══════════ -->
+  <section id="page-results" class="page">
+    <div class="result-header">
+      <button class="back-btn" onclick="showInput()">← Edit texts</button>
+      <h2>Results</h2>
+      <button class="new-analysis-btn" onclick="goHome()">New analysis</button>
+    </div>
+
+    <div id="error-result" class="error-banner"></div>
+    <div id="verdict-badge" class="verdict-badge"></div>
+    <div id="educator-box" class="educator-box" style="display:none"></div>
+    <div id="agents-stack" class="agents-stack"></div>
+  </section>
+
+</main>
+
+<footer>AI INK — Science Fair Demonstration &nbsp;·&nbsp; All analysis runs locally via your API keys.</footer>
+
+<script>
+/* ── State ──────────────────────────────────────────────────── */
+let currentMode = 'single';
+
+const STEPS_SINGLE = [
+  { id: 'analyst', label: 'Analyst — close reading both texts' }
+];
+const STEPS_DEBATE = [
+  { id: 'analyst', label: 'Analyst — initial verdict' },
+  { id: 'skeptic', label: 'Skeptic — challenging the verdict' },
+  { id: 'judge',   label: 'Judge — final determination' }
+];
+
+/* ── Page routing ────────────────────────────────────────────── */
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function selectMode(mode) {
+  currentMode = mode;
+  document.getElementById('input-title').textContent =
+    mode === 'debate' ? 'Multi-Agent Debate' : 'Single LLM Analysis';
+  const pill = document.getElementById('mode-pill');
+  if (mode === 'debate') {
+    pill.textContent = 'Debate';
+    pill.style.cssText = 'background:rgba(138,181,239,0.15);color:#8ab5ef';
+  } else {
+    pill.textContent = 'Single';
+    pill.style.cssText = 'background:rgba(38,203,198,0.15);color:#26cbc6';
+  }
+  resetInput();
+  showPage('page-input');
+}
+
+function goHome()   { showPage('page-landing'); }
+function showInput() { showPage('page-input'); }
+
+function resetInput() {
+  setLoading(false);
+  document.getElementById('error-input').classList.remove('visible');
+  document.getElementById('btn-run').disabled = false;
+}
+
+/* ── Char info ───────────────────────────────────────────────── */
+function updateCharInfo() {
+  const a = (document.getElementById('text-a').value || '').length;
+  const b = (document.getElementById('text-b').value || '').length;
+  document.getElementById('char-info').textContent =
+    a || b ? `A: ${a.toLocaleString()} chars · B: ${b.toLocaleString()} chars` : '';
+}
+
+/* ── Loading state ───────────────────────────────────────────── */
+let stepTimer = null;
+
+function setLoading(on) {
+  const panel = document.getElementById('loading-panel');
+  const grid  = document.querySelector('.text-grid');
+  const runRow = document.querySelector('.run-row');
+  if (on) {
+    panel.classList.add('visible');
+    grid.style.opacity = '0.3';
+    grid.style.pointerEvents = 'none';
+    runRow.style.display = 'none';
+    document.getElementById('error-input').classList.remove('visible');
+    buildStepUI();
+  } else {
+    panel.classList.remove('visible');
+    grid.style.opacity = '';
+    grid.style.pointerEvents = '';
+    runRow.style.display = '';
+    clearTimeout(stepTimer);
+  }
+}
+
+function buildStepUI() {
+  const steps = currentMode === 'debate' ? STEPS_DEBATE : STEPS_SINGLE;
+  const container = document.getElementById('agent-steps');
+  container.innerHTML = steps.map((s, i) =>
+    `<div class="agent-step${i === 0 ? ' active' : ''}" id="step-${s.id}">
+       <span class="step-dot"></span>${s.label}
+     </div>`
+  ).join('');
+
+  if (currentMode === 'debate') {
+    // Optimistic progress animation (real signal comes from server)
+    const DURATIONS = [10000, 12000]; // ms per step
+    let elapsed = 0;
+    function advance(i) {
+      if (i >= STEPS_DEBATE.length - 1) return;
+      stepTimer = setTimeout(() => {
+        const cur = document.getElementById(`step-${STEPS_DEBATE[i].id}`);
+        const nxt = document.getElementById(`step-${STEPS_DEBATE[i + 1].id}`);
+        if (cur) { cur.classList.remove('active'); cur.classList.add('done'); }
+        if (nxt) nxt.classList.add('active');
+        advance(i + 1);
+      }, DURATIONS[i]);
+    }
+    advance(0);
+  }
+}
+
+function markAllDone() {
+  document.querySelectorAll('.agent-step').forEach(s => {
+    s.classList.remove('active');
+    s.classList.add('done');
+  });
+}
+
+/* ── API call ────────────────────────────────────────────────── */
+async function runAnalysis() {
+  const ta = document.getElementById('text-a').value.trim();
+  const tb = document.getElementById('text-b').value.trim();
+  const errEl = document.getElementById('error-input');
+  errEl.classList.remove('visible');
+
+  if (!ta || !tb) {
+    errEl.textContent = 'Please provide both texts before running.';
+    errEl.classList.add('visible');
+    return;
+  }
+  if (ta.length < 20 || tb.length < 20) {
+    errEl.textContent = 'Each text must be at least 20 characters.';
+    errEl.classList.add('visible');
+    return;
+  }
+
+  document.getElementById('btn-run').disabled = true;
+  setLoading(true);
+
+  try {
+    const res = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text_a: ta, text_b: tb, mode: currentMode })
+    });
+    const data = await res.json();
+
+    clearTimeout(stepTimer);
+    if (data.error) {
+      setLoading(false);
+      document.getElementById('btn-run').disabled = false;
+      errEl.textContent = 'Error: ' + data.error;
+      errEl.classList.add('visible');
+      return;
+    }
+
+    markAllDone();
+    setTimeout(() => {
+      setLoading(false);
+      showResults(data);
+    }, 400);
+  } catch (err) {
+    setLoading(false);
+    document.getElementById('btn-run').disabled = false;
+    errEl.textContent = 'Network error: ' + err.message;
+    errEl.classList.add('visible');
+  }
+}
+
+/* ── Results rendering ───────────────────────────────────────── */
+function showResults(data) {
+  const isSame = data.verdict === 'SAME_AUTHOR';
+  const verdictEl = document.getElementById('verdict-badge');
+  verdictEl.className = 'verdict-badge ' + (isSame ? 'same' : 'diff');
+  verdictEl.innerHTML = `
+    <div class="verdict-label">${isSame ? 'SAME AUTHOR' : 'DIFFERENT AUTHOR'}</div>
+    <div class="verdict-conf">Confidence: <strong>${(data.confidence * 100).toFixed(1)}%</strong></div>
+    ${data.elapsed_seconds ? `<div class="verdict-elapsed">Completed in ${data.elapsed_seconds}s</div>` : ''}
+  `;
+
+  const edBox = document.getElementById('educator-box');
+  const summary = data.judge?.educator_summary || '';
+  if (summary) {
+    edBox.style.display = '';
+    edBox.innerHTML = `
+      <div class="section-label">Plain-English Summary</div>
+      <p>${escHtml(summary)}</p>
+    `;
+  } else {
+    edBox.style.display = 'none';
+  }
+
+  const stack = document.getElementById('agents-stack');
+  stack.innerHTML = '';
+
+  // Build agent sections
+  buildAnalystSection(stack, data.analyst);
+  if (data.mode === 'debate') {
+    buildSkepticSection(stack, data.skeptic);
+    buildJudgeSection(stack, data.judge);
+  }
+
+  document.getElementById('error-result').classList.remove('visible');
+  showPage('page-results');
+}
+
+function buildAnalystSection(parent, a) {
+  if (!a) return;
+  const isSame = a.verdict === 'SAME_AUTHOR';
+  const sec = createSection(
+    '🔬 Analyst',
+    miniVerdict(a.verdict, isSame ? 'same' : 'diff', isSame ? 'SAME AUTHOR' : 'DIFF AUTHOR'),
+    `<div class="field-label">Verdict</div>
+     <p>${escHtml(a.verdict || '—')} &nbsp;·&nbsp; Confidence ${(+(a.confidence||0)*100).toFixed(1)}%</p>
+     ${a.key_features?.length ? `
+       <div class="field-label">Key features cited</div>
+       <ul class="bullet-list">${a.key_features.map(f => `<li>${escHtml(f)}</li>`).join('')}</ul>
+     ` : ''}
+     <div class="field-label">Reasoning</div>
+     <p>${escHtml(a.reasoning || '—')}</p>`
+  );
+  parent.appendChild(sec);
+}
+
+function buildSkepticSection(parent, s) {
+  if (!s) return;
+  const cls = s.stance === 'AGREE' ? 'agree' : s.stance === 'PARTIALLY_DISAGREE' ? 'partial' : 'disagree';
+  const sec = createSection(
+    '🕵️ Skeptic',
+    miniStance(s.stance, cls),
+    `<div class="field-label">Stance</div>
+     <p>${escHtml(s.stance || '—')} &nbsp;·&nbsp; Confidence ${(+(s.confidence||0)*100).toFixed(1)}%</p>
+     ${s.challenges?.length ? `
+       <div class="field-label">Challenges to analyst</div>
+       <ul class="bullet-list">${s.challenges.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>
+     ` : ''}
+     ${s.overlooked_evidence?.length ? `
+       <div class="field-label">Overlooked evidence</div>
+       <ul class="bullet-list">${s.overlooked_evidence.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>
+     ` : ''}
+     <div class="field-label">Revised reasoning</div>
+     <p>${escHtml(s.revised_reasoning || '—')}</p>`
+  );
+  parent.appendChild(sec);
+}
+
+function buildJudgeSection(parent, j) {
+  if (!j) return;
+  const isSame = j.verdict === 'SAME_AUTHOR';
+  const sec = createSection(
+    '⚖️ Judge',
+    miniVerdict(j.verdict, isSame ? 'same' : 'diff', isSame ? 'SAME AUTHOR' : 'DIFF AUTHOR'),
+    `<div class="field-label">Final verdict</div>
+     <p>${escHtml(j.verdict || '—')} &nbsp;·&nbsp; Confidence ${(+(j.confidence||0)*100).toFixed(1)}%</p>
+     ${j.decisive_factors?.length ? `
+       <div class="field-label">Decisive factors</div>
+       <ul class="bullet-list">${j.decisive_factors.map(f => `<li>${escHtml(f)}</li>`).join('')}</ul>
+     ` : ''}
+     <div class="field-label">Agent agreement</div>
+     <p>${escHtml(j.agent_agreement || '—')}</p>`
+  );
+  parent.appendChild(sec);
+}
+
+function createSection(title, badgeHTML, bodyHTML) {
+  const sec = document.createElement('div');
+  sec.className = 'agent-section';
+  sec.innerHTML = `
+    <button class="agent-toggle" onclick="toggleSection(this)">
+      <span class="agent-toggle-name">${title}</span>
+      ${badgeHTML}
+      <span class="chevron">▾</span>
+    </button>
+    <div class="agent-body">${bodyHTML}</div>
+  `;
+  return sec;
+}
+
+function miniVerdict(verdict, cls, label) {
+  return `<span class="agent-mini-verdict mini-${cls}">${label}</span>`;
+}
+function miniStance(stance, cls) {
+  const label = (stance || 'UNKNOWN').replace('_', ' ');
+  return `<span class="agent-mini-verdict mini-${cls}">${label}</span>`;
+}
+
+function toggleSection(btn) {
+  btn.closest('.agent-section').classList.toggle('open');
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

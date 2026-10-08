@@ -1,0 +1,32 @@
+# Secrets — never commit API keys
+.env
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.cursor/
+.matplotlib-cache/
+
+# Unrelated local folder
+fashion shopper/
+
+# Local datasets (Reuters C50 + student essays stay on disk, not GitHub)
+data/raw/reuter+50+50/
+data/raw/student_essays/
+data/raw/Student Essays/
+data/processed/
+data/vector_store/
+data/**/__pycache__/
+
+# Experiment run artifacts
+experiments/results/*
+!experiments/results/figures/
+!experiments/results/full_comparison.txt
+experiments/**/__pycache__/
